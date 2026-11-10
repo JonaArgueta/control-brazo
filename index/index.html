@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Control Brazo Robótico</title>
+<style>
+  :root {
+    --neon:#00e5ff; --rosa:#ff2e88; --fondo:#0b0d17;
+    --tam: clamp(58px, 17vmin, 96px);   /* tamaño de cada tecla, se adapta a la pantalla */
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent;
+      user-select:none; -webkit-user-select:none; touch-action:manipulation; }
+  html, body { height:100%; }
+  body { margin:0; color:#fff; font-family:system-ui,Arial,sans-serif;
+         background:radial-gradient(circle at 50% 0, #1b1f3a, var(--fondo));
+         display:flex; flex-direction:column; align-items:center;
+         justify-content:space-between;
+         padding:max(14px, env(safe-area-inset-top)) 16px max(14px, env(safe-area-inset-bottom)); }
+
+  header { text-align:center; }
+  h1 { margin:0; font-size:clamp(16px, 4.5vmin, 26px); letter-spacing:4px;
+       color:var(--neon); text-shadow:0 0 14px var(--neon); }
+  #estado { display:inline-flex; align-items:center; gap:8px; margin-top:8px; font-size:13px; }
+  #led { width:11px; height:11px; border-radius:50%; background:#e03a3a; box-shadow:0 0 8px #e03a3a; }
+  #led.on { background:#2cff7a; box-shadow:0 0 12px #2cff7a; }
+  #conectar { display:block; margin:10px auto 0; padding:10px 28px; border:2px solid var(--neon);
+              border-radius:30px; background:transparent; color:var(--neon);
+              font-weight:bold; letter-spacing:1px; font-size:14px; cursor:pointer; }
+  #conectar:hover, #conectar:active { background:var(--neon); color:#000; }
+
+  .mando { width:100%; max-width:760px; display:flex; justify-content:space-around;
+           align-items:center; gap:16px; margin:12px 0; }
+  .dpad { display:grid; grid-template-columns:repeat(3, var(--tam));
+          grid-template-rows:repeat(3, var(--tam)); gap:6px; }
+  .dpad .centro { grid-area:2/2; border-radius:12px; background:#141730; }
+  #arriba { grid-area:1/2; } #izq { grid-area:2/1; } #der { grid-area:2/3; }
+
+  .tecla { border:2px solid #39407a; border-radius:16px; background:#1d2140; color:#fff;
+           font-size:clamp(22px, 6vmin, 36px); cursor:pointer;
+           transition:transform .08s, box-shadow .08s, border-color .08s; }
+  .tecla.activo { transform:scale(.92); border-color:var(--neon);
+                  box-shadow:0 0 18px var(--neon), inset 0 0 12px rgba(0,229,255,.35); }
+  .tecla:disabled { opacity:.35; cursor:not-allowed; }
+
+  .accion { width:calc(var(--tam) * 1.6); height:calc(var(--tam) * 1.6); border-radius:50%;
+            font-size:clamp(12px, 3.2vmin, 17px); font-weight:bold; letter-spacing:1px;
+            border-color:var(--rosa); background:#2a1230; }
+  .accion.activo { border-color:var(--rosa);
+                   box-shadow:0 0 22px var(--rosa), inset 0 0 14px rgba(255,46,136,.4); }
+
+  .ayuda { font-size:11px; color:#8890c0; text-align:center; margin-top:8px; }
+  #log { font-size:12px; color:#8890c0; min-height:16px; text-align:center; }
+
+  /* Celular en horizontal: encabezado compacto y mando más ancho */
+  @media (orientation:landscape) and (max-height:520px) {
+    body { padding-top:8px; padding-bottom:8px; }
+    header { display:flex; align-items:center; gap:16px; }
+    #conectar { margin:0; }
+    .mando { margin:4px 0; }
+    .ayuda { display:none; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🦾 BRAZO ROBÓTICO</h1>
+      <div id="estado"><span id="led"></span><span id="txt">Desconectado</span></div>
+    </div>
+    <button id="conectar">CONECTAR</button>
+  </header>
+
+  <div class="mando">
+    <div>
+      <div class="dpad">
+        <button class="tecla" id="arriba" data-c="2" disabled>▲</button>
+        <button class="tecla" id="izq" data-c="3" disabled>◀</button>
+        <div class="centro"></div>
+        <button class="tecla" id="der" data-c="4" disabled>▶</button>
+      </div>
+      <div class="ayuda">◀ ▶ Base (A / D) · ▲ Hombro (W)</div>
+    </div>
+    <div>
+      <button class="tecla accion" data-c="1" disabled>🏠<br>REPOSO</button>
+      <div class="ayuda">Espacio / R</div>
+    </div>
+  </div>
+
+  <div id="log"></div>
+
+<script>
+  const SERVICIO = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+  const RX       = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+  let dispositivo = null, rx = null;
+
+  const led = document.getElementById('led');
+  const txt = document.getElementById('txt');
+  const log = document.getElementById('log');
+  const teclas = document.querySelectorAll('.tecla');
+
+  function estado(conectado) {
+    led.classList.toggle('on', conectado);
+    txt.textContent = conectado ? 'Conectado' : 'Desconectado';
+    teclas.forEach(t => t.disabled = !conectado);
+    if (!conectado) rx = null;
+  }
+
+  async function conectar() {
+    if (!navigator.bluetooth) {
+      alert('Usa Chrome o Edge (laptop y Android). En iPhone usa la app Bluefy.');
+      return;
+    }
+    try {
+      dispositivo = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [SERVICIO] }]
+      });
+      dispositivo.addEventListener('gattserverdisconnected', () => estado(false));
+      const servidor = await dispositivo.gatt.connect();
+      const servicio = await servidor.getPrimaryService(SERVICIO);
+      rx = await servicio.getCharacteristic(RX);
+      estado(true);
+      log.textContent = '';
+    } catch (e) {
+      log.textContent = 'No se pudo conectar: ' + e.message;
+    }
+  }
+
+  async function enviar(c) {
+    if (!rx) return;
+    try {
+      await rx.writeValueWithoutResponse(new TextEncoder().encode(c));
+      if (navigator.vibrate) navigator.vibrate(25);
+      log.textContent = 'Enviado: ' + c;
+    } catch (e) {
+      log.textContent = 'Error: ' + e.message;
+      estado(false);
+    }
+  }
+
+  document.getElementById('conectar').addEventListener('click', conectar);
+
+  teclas.forEach(t => {
+    t.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      t.classList.add('activo');
+      enviar(t.dataset.c);
+    });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev =>
+      t.addEventListener(ev, () => t.classList.remove('activo')));
+  });
+
+  // Teclado (laptop)
+  const mapa = { arrowup:'2', arrowleft:'3', arrowright:'4',
+                 ' ':'1', enter:'1', w:'2', a:'3', d:'4', r:'1' };
+  document.addEventListener('keydown', e => {
+    const c = mapa[e.key.toLowerCase()];
+    if (!c || e.repeat) return;
+    e.preventDefault();
+    const b = document.querySelector(`.tecla[data-c="${c}"]`);
+    if (b && !b.disabled) b.classList.add('activo');
+    enviar(c);
+  });
+  document.addEventListener('keyup', () =>
+    teclas.forEach(t => t.classList.remove('activo')));
+</script>
+</body>
+</html>
