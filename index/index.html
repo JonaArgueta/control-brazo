@@ -86,8 +86,13 @@
           transform:rotate(-18deg); font-family:inherit; cursor:pointer; box-shadow:0 4px 0 rgba(0,0,0,.55); }
   .pill:active, .pill.activo { transform:rotate(-18deg) translateY(3px); box-shadow:0 1px 0 rgba(0,0,0,.55); }
 
+  .codo { text-align:center; }
+  .codo .fila { display:flex; gap:10px; justify-content:center; }
+  .mini { width:46px; height:46px; border-radius:50%; background:var(--negro); color:var(--oro2);
+          border:3px solid var(--negro); font-size:18px; font-weight:900; padding:0; }
+
   #log { font-size:12px; min-height:16px; text-align:center; color:#6b5a2a; }
-  .atajos { font-size:11px; color:#8a7740; text-align:center; max-width:520px; }
+  .atajos { font-size:11px; color:#8a7740; text-align:center; max-width:560px; }
 
   /* Celular en vertical */
   @media (max-width:560px) {
@@ -144,13 +149,16 @@
           <g id="g2" transform="translate(0,-75) rotate(20)">
             <rect x="-8" y="-70" width="16" height="70" rx="8" fill="#f7cf5a" stroke="#141414" stroke-width="4"/>
             <g id="g3" transform="translate(0,-70)">
-              <g id="dedoI" transform="translate(-9,-12) rotate(-11)">
-                <rect x="-4" y="-36" width="8" height="36" rx="4" fill="#141414"/>
+              <!-- Garra (g4 se aplasta para simular el giro lateral) -->
+              <g id="g4">
+                <g id="dedoI" transform="translate(-9,-12) rotate(-11)">
+                  <rect x="-4" y="-36" width="8" height="36" rx="4" fill="#141414"/>
+                </g>
+                <g id="dedoD" transform="translate(9,-12) rotate(11)">
+                  <rect x="-4" y="-36" width="8" height="36" rx="4" fill="#141414"/>
+                </g>
+                <rect x="-14" y="-14" width="28" height="16" rx="5" fill="#fffdf6" stroke="#141414" stroke-width="4"/>
               </g>
-              <g id="dedoD" transform="translate(9,-12) rotate(11)">
-                <rect x="-4" y="-36" width="8" height="36" rx="4" fill="#141414"/>
-              </g>
-              <rect x="-14" y="-14" width="28" height="16" rx="5" fill="#fffdf6" stroke="#141414" stroke-width="4"/>
               <circle r="6" fill="#e0a82e" stroke="#141414" stroke-width="3"/>
             </g>
             <circle r="9" fill="#e0a82e" stroke="#141414" stroke-width="4"/>
@@ -161,7 +169,7 @@
     </div>
     <div class="datos">
       <span id="dB"></span><span id="dH"></span><span id="dC"></span>
-      <span id="dM"></span><span id="dP"></span>
+      <span id="dM1"></span><span id="dM2"></span><span id="dP"></span>
     </div>
   </div>
 
@@ -187,24 +195,31 @@
         <div class="estado"><span id="led"></span><span id="txt">Desconectado</span></div>
         <button class="pill" id="conectar">CONECTAR</button>
         <button class="tecla pill" data-c="1" disabled>🏠 REPOSO</button>
+        <div class="codo">
+          <div class="fila">
+            <button class="tecla mini" data-c="i" disabled>▲</button>
+            <button class="tecla mini" data-c="k" disabled>▼</button>
+          </div>
+          <span class="etq">CODO</span>
+        </div>
       </div>
 
       <div class="der">
         <div class="aro">
           <div class="rombo">
-            <button class="tecla u oro" data-c="i" disabled>▲</button>
-            <button class="tecla l neg" data-c="j" disabled>◀</button>
-            <button class="tecla r neg" data-c="l" disabled>▶</button>
-            <button class="tecla d oro" data-c="k" disabled>▼</button>
+            <button class="tecla u oro" data-c="l" disabled>▲</button>
+            <button class="tecla l neg" data-c="u" disabled>◀</button>
+            <button class="tecla r neg" data-c="y" disabled>▶</button>
+            <button class="tecla d oro" data-c="j" disabled>▼</button>
           </div>
         </div>
-        <span class="etq">CODO · MUÑECA</span>
+        <span class="etq">MUÑECA · GIRO</span>
       </div>
     </div>
   </div>
 
   <div id="log"></div>
-  <div class="atajos">Teclado: W A S D base/hombro · Flechas codo/muñeca · Q abrir · E cerrar · Espacio reposo</div>
+  <div class="atajos">Teclado: W A S D base/hombro · I K codo · Flechas ↑↓ muñeca, ←→ giro · Q abrir · E cerrar · Espacio reposo</div>
 
 <script>
   /* ---------- Bluetooth ---------- */
@@ -259,17 +274,22 @@
 
   /* ---------- Simulación de la garra ---------- */
   const PASO = 5;
-  const LIM = { b:[0,180], h:[75,165], c:[0,180], m:[0,180], p:[10,120] };
-  const meta  = { b:90, h:110, c:90, m:90, p:45 };
-  const vista = { ...meta };
+  // b=base, h=hombro, c=codo, m1=muñeca arriba/abajo, m2=muñeca giro, p=pinza
+  const LIM = { b:[0,180], h:[75,165], c:[0,180], m1:[0,180], m2:[0,180], p:[10,120] };
+  const REPOSO = { b:90, h:110, c:90, m1:90, m2:90, p:45 };
+  const meta  = { ...REPOSO };
+  const vista = { ...REPOSO };
   const acotar = (k, v) => Math.min(LIM[k][1], Math.max(LIM[k][0], v));
 
-  const MOV = { a:['b',-PASO], d:['b',PASO], w:['h',PASO], s:['h',-PASO],
-                i:['c',PASO],  k:['c',-PASO], j:['m',-PASO], l:['m',PASO],
-                o:['p',PASO],  c:['p',-PASO] };
+  const MOV = { a:['b',-PASO],  d:['b',PASO],
+                w:['h',PASO],   s:['h',-PASO],
+                i:['c',PASO],   k:['c',-PASO],
+                j:['m1',-PASO], l:['m1',PASO],
+                u:['m2',-PASO], y:['m2',PASO],
+                o:['p',PASO],   c:['p',-PASO] };
 
   function simular(cmd) {
-    if (cmd === '1') { meta.b = 90; meta.h = 110; meta.c = 90; meta.m = 90; return; }
+    if (cmd === '1') { Object.assign(meta, REPOSO); return; }
     if (cmd === '2') { meta.h = 150; return; }
     if (cmd === '3') { meta.b = 45; return; }
     if (cmd === '4') { meta.b = 135; return; }
@@ -278,22 +298,31 @@
   }
 
   const $ = id => document.getElementById(id);
-  const g1 = $('g1'), g2 = $('g2'), g3 = $('g3'), dedoI = $('dedoI'), dedoD = $('dedoD'), aguja = $('aguja');
+  const g1 = $('g1'), g2 = $('g2'), g3 = $('g3'), g4 = $('g4');
+  const dedoI = $('dedoI'), dedoD = $('dedoD'), aguja = $('aguja');
 
   function dibujar() {
     for (const k in meta) vista[k] += (meta[k] - vista[k]) * 0.12;
+
     g1.setAttribute('transform', `translate(170,198) rotate(${130 - vista.h})`);
     g2.setAttribute('transform', `translate(0,-75) rotate(${vista.c - 70})`);
-    g3.setAttribute('transform', `translate(0,-70) rotate(${(vista.m - 90) * 0.5})`);
+    g3.setAttribute('transform', `translate(0,-70) rotate(${(vista.m1 - 90) * 0.7})`);
+
+    // Giro lateral de la muñeca: la garra se "aplasta" como si girara sobre su eje
+    const sx = Math.max(0.3, Math.cos((vista.m2 - 90) * 0.8 * Math.PI / 180));
+    g4.setAttribute('transform', `scale(${sx},1)`);
+
     const abre = 4 + (vista.p - 10) * 0.2;
     dedoI.setAttribute('transform', `translate(-9,-12) rotate(${-abre})`);
     dedoD.setAttribute('transform', `translate(9,-12) rotate(${abre})`);
     aguja.setAttribute('transform', `rotate(${vista.b - 90})`);
-    $('dB').textContent = 'Base ' + Math.round(meta.b) + '°';
-    $('dH').textContent = 'Hombro ' + Math.round(meta.h) + '°';
-    $('dC').textContent = 'Codo ' + Math.round(meta.c) + '°';
-    $('dM').textContent = 'Muñeca ' + Math.round(meta.m) + '°';
-    $('dP').textContent = 'Pinza ' + Math.round(meta.p) + '°';
+
+    $('dB').textContent  = 'Base ' + Math.round(meta.b) + '°';
+    $('dH').textContent  = 'Hombro ' + Math.round(meta.h) + '°';
+    $('dC').textContent  = 'Codo ' + Math.round(meta.c) + '°';
+    $('dM1').textContent = 'Muñeca ' + Math.round(meta.m1) + '°';
+    $('dM2').textContent = 'Giro ' + Math.round(meta.m2) + '°';
+    $('dP').textContent  = 'Pinza ' + Math.round(meta.p) + '°';
     requestAnimationFrame(dibujar);
   }
   dibujar();
@@ -322,7 +351,8 @@
 
   /* ---------- Teclado (laptop) ---------- */
   const mapa = { w:'w', a:'a', s:'s', d:'d',
-                 arrowup:'i', arrowdown:'k', arrowleft:'j', arrowright:'l',
+                 i:'i', k:'k',
+                 arrowup:'l', arrowdown:'j', arrowleft:'u', arrowright:'y',
                  q:'o', e:'c', ' ':'1', r:'1', enter:'1' };
   document.addEventListener('keydown', e => {
     const c = mapa[e.key.toLowerCase()];
